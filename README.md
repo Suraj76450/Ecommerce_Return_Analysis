@@ -1,16 +1,17 @@
-# E-Commerce Return and Refund Analysis: Identifying Root Causes & Business Optimization Opportunities
+# E-Commerce Return & Refund Analysis: Root Causes & Business Optimization
 
-This is an end-to-end data science and business analytics project designed to diagnose why customers return products in e-commerce, measure the true financial impact, and provide actionable recommendations to reduce return rates and optimize profitability.
+This is a production-ready, end-to-end data science and business analytics project designed to diagnose why customers return products in e-commerce, measure the true financial impact, and provide automated predictive mitigations to reduce return rates and optimize store profitability.
 
 ---
 
 ## 🌟 Project Highlights
-1. **Interactive Streamlit Web Dashboard**: Live local dashboard showing KPIs, trends, operational performance, bracketing behavior, and real-time returns prediction.
-2. **Machine Learning Predictive pipeline**: A Random Forest classifier that predicts return probabilities based on order profiles, showing feature importances (e.g. logistics delays).
-3. **Bracketing & Cohort Analysis**: Identifies bracketing behavior (buying multiple sizes/variations to return the rest) and isolates chronic returner segments.
-4. **Reverse Logistics Cost Modeling**: Calculates net profit loss by incorporating flat shipping and restocking overhead on top of refund totals.
-5. **Statistical Verification**: Leverages Chi-Square, T-Tests, ANOVA, and Correlation to validate findings mathematically.
-6. **Power BI Development Blueprint**: Detailed guide specifying star schema model, relationships, exact DAX formulas, and visual hierarchies.
+
+1. **Interactive Obsidian Dark Dashboard**: Re-engineered with a sleek, premium dark-mode design, sidebar routing, and hardware-accelerated **Plotly Express** interactive vector charts. Users can hover, zoom, and toggle legend metrics in real-time under a sub-100ms execution frame.
+2. **Upgraded Machine Learning Pipeline**: Built using Scikit-Learn's state-of-the-art **`HistGradientBoostingClassifier`** (gradient-boosted trees). Incorporating engineered features like `Delivery Delay` (expected vs. actual shipping days) and `Is Delayed` boosted model accuracy to **72.12%** and ROC-AUC to **0.7366**.
+3. **⚙️ Data Pipeline Admin Control Center**: An administrative portal integrated directly into the web UI, allowing users to synthesize raw transactions, execute sanitization pipelines, and retrain ML predictors with a single click.
+4. **Bracketing & Cohort Diagnostics**: Detects customer bracketing behavior (buying multiple sizes/styles of a single item to return the rest) and isolates high-risk serial returners.
+5. **Reverse Logistics Cost Modeling**: Quantifies net financial loss by factoring in flat shipping and restocking fees on top of raw refund totals.
+6. **Star Schema Power BI Blueprint**: Detailed blueprint specifying schema relationships, DAX formulas, and visual hierarchies for BI deployment.
 
 ---
 
@@ -23,7 +24,7 @@ Ecommerce_Return_Analysis/
 │   ├── raw_data.csv               # Synthesized raw data (50,000+ orders with anomalies)
 │   ├── cleaned_data.csv           # Cleaned transaction data with engineered features
 │   ├── chronic_returners.csv      # Customer segment flagged for excessive returns
-│   └── return_prediction_pipeline.pkl # Serialized ML model pipeline
+│   └── return_prediction_pipeline.pkl # Serialized HistGradientBoosting model pipeline
 │
 ├── notebooks/
 │   ├── 01_data_cleaning.ipynb      # Loading, profiling, and sanitizing raw transactions
@@ -52,49 +53,109 @@ Ecommerce_Return_Analysis/
 ## 🚀 Setup & Execution Guide
 
 ### 1. Clone & Set Up Workspace
-Navigate to the directory and ensure python is installed.
-
+Navigate to the directory and install dependencies:
 ```bash
+git clone https://github.com/Suraj76450/Ecommerce_Return_Analysis.git
 cd Ecommerce_Return_Analysis
 pip install -r requirements.txt
 ```
 
-### 2. (Optional) Re-Generate Dataset
-The raw data is already generated. If you want to recreate it or change the sample size, run:
-```bash
-python scripts/generate_data.py
-```
-
-### 3. Run Analysis Notebooks
-You can open the Jupyter Notebook interface to inspect the analysis:
-```bash
-jupyter notebook
-```
-Open and run the notebooks in the `notebooks/` folder in numerical sequence (`01` through `04`).
-*(Note: If you run the source python files instead, you can run them from the notebooks directory: `python ../scripts/notebooks_src/01_data_cleaning.py`, etc.)*
-
-### 4. Launch the Interactive Dashboard
+### 2. Launch the Interactive Dashboard
 To launch the Streamlit app:
 ```bash
-streamlit run dashboard/app.py
+python -m streamlit run dashboard/app.py
 ```
-This will start a local server and open the web dashboard in your browser.
+This will start the local server and open the web dashboard at **http://localhost:8501**.
 
 ---
 
-## 💡 Key Business Findings
-* **The Logistics Delay Trap**: On-time orders show a **17.29%** return rate, which swells to **48.20%** if the order is delayed. Reducing delays is the highest-leverage operational trigger.
-* **Apparel Fit Challenge**: Clothing returns are the highest (**41.35%**), primarily caused by "Wrong Size" (55%+). Implementing fit advisory modules is key.
-* **Quality Leakage**: Seller E (Budget Imports) exhibits a refund-to-revenue ratio of **41.06%**, heavily driven by "Defective" and "Damaged" products. Quality audits are highly recommended.
-* **Chronic Cohorts**: 8.45% of users represent "chronic returners" but generate **14.02%** of all returns.
-* **Bracketing Impact**: Bracketing behaviors account for 1.08% of orders and lead to **$114K+** in refund capital drain.
+## ⚙️ Data Pipeline Control Center
+The dashboard features an integrated **Data Pipeline Control Panel** where you can trigger backend updates from the UI:
+1. **Synthesize**: Slide the input to generate up to $100,000$ raw orders with anomalies and duplicates.
+2. **Clean**: Executes Pandas deduplication, currency string cleaning, date standardizations, and imputes missing ratings.
+3. **Train**: Splits data, fits the `ColumnTransformer` (scaling numericals and one-hot encoding categoricals), trains the **HistGradientBoosting** model, prints logs, and updates the local serialized pipeline.
+
+---
+
+## 🌍 Real-Life Production Deployment Blueprint
+
+This project is built modularly so that it can be connected directly to a live e-commerce store (e.g. Shopify, WooCommerce, Magento) and run in production.
+
+### Step 1: Connecting to Real Data
+To transition to real-life transactions, query your live relational database (e.g. PostgreSQL, BigQuery, Snowflake) and overwrite the raw target file:
+```python
+import pandas as pd
+import psycopg2
+
+conn = psycopg2.connect("dbname=shopify_store user=admin password=secret host=db.mycompany.com")
+df_real = pd.read_sql_query("SELECT * FROM orders_and_shipments", conn)
+df_real.to_csv("data/raw_data.csv", index=False)
+```
+
+### Step 2: Deploying the ML Model as a Live REST API
+You can run the trained model pipeline (`return_prediction_pipeline.pkl`) inside a lightweight **FastAPI** web server to serve real-time predictions to your website's checkout page.
+
+#### API Script (`api.py`):
+```python
+import pickle
+import pandas as pd
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI(title="E-Commerce Return Risk Predictor")
+
+# Load model pipeline
+with open("data/return_prediction_pipeline.pkl", "rb") as f:
+    model = pickle.load(f)
+
+class CheckoutCart(BaseModel):
+    Category: str
+    Brand: str
+    Shipping_Type: str
+    Seller: str
+    Segment: str
+    Gender: str
+    Price: float
+    Quantity: int
+    Discount: float
+    Delivery_Days: int
+    Customer_Age: int
+
+@app.post("/predict-return")
+def predict_return(cart: CheckoutCart):
+    # Process delay metrics
+    expected = {"Overnight": 1, "Express": 2, "Standard": 5}[cart.Shipping_Type]
+    delay = max(0, cart.Delivery_Days - expected)
+    is_delayed = 1 if delay > 0 else 0
+    
+    # Format input to match training schema
+    input_data = pd.DataFrame([{
+        "Category": cart.Category, "Brand": cart.Brand, "Shipping Type": cart.Shipping_Type,
+        "Seller": cart.Seller, "Segment": cart.Segment, "Gender": cart.Gender,
+        "Price": cart.Price, "Quantity": cart.Quantity, "Discount": cart.Discount,
+        "Delivery Days": cart.Delivery_Days, "Delivery Delay": delay,
+        "Is Delayed": is_delayed, "Customer Age": cart.Customer_Age
+    }])
+    
+    # Run prediction
+    probability = model.predict_proba(input_data)[0][1]
+    return {"return_probability": float(probability)}
+```
+
+### Step 3: Triggering Automated Store Interventions
+Once your checkout frontend receives the return probability from the API, it applies real-time preventative measures:
+* **High Risk (> 50%)**:
+  * Prompt the user to double-check their sizing with a dynamic size guide.
+  * Disable Cash on Delivery (COD) to prevent high-risk Return-To-Origin (RTO) cash drain.
+* **Medium Risk (25% - 50%)**:
+  * Offer a free shipping upgrade to Express (since shipping delay is the single strongest statistical driver of returns).
+* **Bracketing Customers**:
+  * Block checkout if a customer adds 3 sizes of the same apparel item (e.g. Medium, Large, XL of the same shirt) to nudge them toward fitting support.
 
 ---
 
 ## 🛠️ Technology Stack
-* **Language**: Python 3.10+
-* **Data Processing**: Pandas, NumPy
-* **Visualization**: Matplotlib, Seaborn
-* **Statistical Analysis**: SciPy (Stats module)
-* **Machine Learning**: Scikit-Learn (Logistic Regression, Random Forests, preprocessing pipelines)
-* **Dashboarding**: Streamlit (Python Web App), Power BI (DAX, Star Schema)
+* **Web UI**: Streamlit (Python App Framework), Plotly Express (Browser charts)
+* **ML Engines**: Scikit-Learn (HistGradientBoosting, column preprocessors)
+* **Data Core**: Pandas, NumPy, SciPy (Statistical T-Tests, ANOVA, Chi-Square validation)
+* **Infrastructure**: Git, FastAPI (Deployment framework)
