@@ -7,3 +7,4 @@ scikit-learn>=1.0.0
 streamlit>=1.15.0
 ipykernel>=6.0.0
 nbformat>=5.0.0
+plotly>=5.0.0
