@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
 from sklearn.metrics import roc_auc_score
 
 
@@ -471,17 +471,21 @@ def run_model_training_backend(progress_bar):
     log.append("🧠 Loading clean datasets...")
     clean_path = get_path("cleaned_data.csv")
     df_ml = pd.read_csv(clean_path)
+    
+    # Ensure df_ml has "Is Delayed"
+    df_ml["Is Delayed"] = (df_ml["Delivery Delay"] > 0).astype(int)
+    
     progress_bar.progress(20, "Splitting train/test split...")
     
     features = [
         "Category", "Brand", "Shipping Type", "Seller", "Segment", "Gender",
-        "Price", "Quantity", "Discount", "Delivery Days", "Customer Age"
+        "Price", "Quantity", "Discount", "Delivery Days", "Delivery Delay", "Is Delayed", "Customer Age"
     ]
     target = "Return Indicator"
     X = df_ml[features]
     y = df_ml[target]
     
-    num_features = ["Price", "Quantity", "Discount", "Delivery Days", "Customer Age"]
+    num_features = ["Price", "Quantity", "Discount", "Delivery Days", "Delivery Delay", "Is Delayed", "Customer Age"]
     cat_features = ["Category", "Brand", "Shipping Type", "Seller", "Segment", "Gender"]
     
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=42, stratify=y)
@@ -494,29 +498,29 @@ def run_model_training_backend(progress_bar):
         ]
     )
     
-    progress_bar.progress(60, "Training Random Forest Pipeline...")
-    rf_pipeline = Pipeline(
+    progress_bar.progress(60, "Training HistGradientBoosting Pipeline...")
+    hgb_pipeline = Pipeline(
         steps=[
             ("preprocessor", preprocessor),
-            ("classifier", RandomForestClassifier(n_estimators=100, max_depth=12, random_state=42, n_jobs=-1))
+            ("classifier", HistGradientBoostingClassifier(max_iter=150, max_depth=8, learning_rate=0.08, random_state=42))
         ]
     )
-    rf_pipeline.fit(X_train, y_train)
+    hgb_pipeline.fit(X_train, y_train)
     
     progress_bar.progress(80, "Evaluating model scoring...")
-    y_pred = rf_pipeline.predict(X_test)
-    y_prob = rf_pipeline.predict_proba(X_test)[:, 1]
+    y_pred = hgb_pipeline.predict(X_test)
+    y_prob = hgb_pipeline.predict_proba(X_test)[:, 1]
     auc = roc_auc_score(y_test, y_prob)
     acc = (y_pred == y_test).mean()
     
-    log.append("Random Forest training completed.")
+    log.append("HistGradientBoosting training completed.")
     log.append(f"Model Accuracy: {acc*100:.2f}%")
     log.append(f"Model ROC-AUC Score: {auc:.4f}")
     
     progress_bar.progress(95, "Serializing ML pipeline pkl...")
     model_path = "dashboard/return_prediction_pipeline.pkl" if os.path.exists("dashboard") else "return_prediction_pipeline.pkl"
     with open(model_path, "wb") as f:
-        pickle.dump(rf_pipeline, f)
+        pickle.dump(hgb_pipeline, f)
         
     log.append(f"Model successfully saved to {os.path.abspath(model_path)}!")
     progress_bar.progress(100, "Done!")
@@ -1060,11 +1064,17 @@ elif page == "🤖 Return Predictor (ML)":
         st.markdown('</div>', unsafe_allow_html=True)
 
         if st.button("🔮 Predict Return Probability", type="primary"):
+            # Calculate engineered features dynamically for prediction
+            expected_days = {"Overnight": 1, "Express": 2, "Standard": 5}[sim_shipping]
+            sim_delay = max(0, sim_delivery - expected_days)
+            sim_is_delayed = 1 if sim_delay > 0 else 0
+            
             input_df = pd.DataFrame([{
                 "Category": sim_category, "Brand": sim_brand, "Shipping Type": sim_shipping,
                 "Seller": sim_seller, "Segment": sim_segment, "Gender": sim_gender,
                 "Price": sim_price, "Quantity": sim_qty, "Discount": sim_discount,
-                "Delivery Days": sim_delivery, "Customer Age": sim_age
+                "Delivery Days": sim_delivery, "Delivery Delay": sim_delay, 
+                "Is Delayed": sim_is_delayed, "Customer Age": sim_age
             }])
             
             prob = model.predict_proba(input_df)[0][1]
