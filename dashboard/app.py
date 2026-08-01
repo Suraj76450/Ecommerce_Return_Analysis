@@ -670,8 +670,8 @@ if page == "📈 Executive Overview":
             ))
             fig.update_layout(
                 title="Returns Volume & Rate Monthly Timeline",
-                yaxis=dict(title="Returned Orders", gridcolor="#1E293B", titlefont=dict(color="#94A3B8")),
-                yaxis2=dict(title="Return Rate (%)", overlaying="y", side="right", titlefont=dict(color="#94A3B8"), showgrid=False),
+                yaxis=dict(title=dict(text="Returned Orders", font=dict(color="#94A3B8")), gridcolor="#1E293B"),
+                yaxis2=dict(title=dict(text="Return Rate (%)", font=dict(color="#94A3B8")), overlaying="y", side="right", showgrid=False),
                 template="plotly_dark",
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
