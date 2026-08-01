@@ -3,17 +3,8 @@ import pickle
 import numpy as np
 import pandas as pd
 import streamlit as st
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-# Import helper libraries for direct pipeline executions
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, roc_curve
+import plotly.express as px
+import plotly.graph_objects as go
 
 # Set page config
 st.set_page_config(
@@ -43,7 +34,7 @@ st.markdown("""
     }
     
     /* Sidebar text colors */
-    [data-testid="stSidebar"] .css-17l2qty, [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] span {
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] span {
         color: #F1F5F9 !important;
     }
     
@@ -117,39 +108,23 @@ st.markdown("""
         margin: 25px 0;
     }
     
-    /* Tabs custom styling */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: transparent;
-        padding-bottom: 10px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background-color: rgba(15, 23, 42, 0.6);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 8px;
-        padding: 8px 16px;
-        color: #94A3B8 !important;
-        font-weight: 600;
-        transition: all 0.2s ease;
-    }
-    .stTabs [data-baseweb="tab"]:hover {
-        background-color: rgba(30, 41, 59, 0.8);
-        color: #FFFFFF !important;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #1E3A8A !important;
-        border-color: #3B82F6 !important;
-        color: #FFFFFF !important;
-    }
-    
     /* Card wrapper for charts */
     .chart-container {
-        background: rgba(15, 23, 42, 0.4);
-        border: 1px solid rgba(255, 255, 255, 0.05);
+        background: rgba(15, 23, 42, 0.45);
+        border: 1px solid rgba(255, 255, 255, 0.06);
         border-radius: 14px;
         padding: 20px;
         margin-bottom: 20px;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+    
+    /* Sidebar styling overrides for radio buttons */
+    div[data-testid="stSidebarUserContent"] div.stRadio > label {
+        color: #94A3B8 !important;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 11px;
+        letter-spacing: 0.05em;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -163,34 +138,11 @@ def get_path(filename):
     os.makedirs("data", exist_ok=True)
     return os.path.abspath(os.path.join("data", filename))
 
-# Helper to style Matplotlib figures for transparent Obsidian theme
-def style_obsidian_chart(fig, ax, title_str=""):
-    fig.patch.set_facecolor('#0B0F19')
-    fig.patch.set_alpha(0.0) # Transparent
-    ax.set_facecolor('none') # Transparent axes
-    
-    # Configure Spines
-    for spine in ax.spines.values():
-        spine.set_color('#1E293B')
-        spine.set_linewidth(1)
-        
-    # Configure Grids
-    ax.grid(color='#1E293B', linestyle='--', linewidth=0.8, alpha=0.5)
-    
-    # Configure Labels
-    ax.tick_params(colors='#94A3B8', labelsize=9)
-    ax.xaxis.label.set_color('#94A3B8')
-    ax.xaxis.label.set_fontsize(10)
-    ax.yaxis.label.set_color('#94A3B8')
-    ax.yaxis.label.set_fontsize(10)
-    
-    if title_str:
-        ax.set_title(title_str, color='#FFFFFF', fontsize=12, fontweight='bold', pad=12)
-
 # --- DATA PIPELINE BACKEND FUNCTIONS ---
 
 def run_data_generation_backend(num_orders, progress_bar):
     import random
+    from datetime import datetime
     random.seed(42)
     np.random.seed(42)
     
@@ -318,7 +270,6 @@ def run_data_generation_backend(num_orders, progress_bar):
             rating_probs = [0.15, 0.20, 0.25, 0.25, 0.15]
         customer_rating = np.random.choice([1, 2, 3, 4, 5], p=rating_probs)
         
-        # Return probability
         return_prob = 0.05
         if category == "Clothing":
             return_prob += 0.15
@@ -583,44 +534,54 @@ if clean_data_exists:
 else:
     df, chronic_df = pd.DataFrame(), pd.DataFrame()
 
-# 2. Sidebar Filters (only if clean data is present)
-if not df.empty:
-    years = sorted(df["Order Year"].unique())
-    selected_year = st.sidebar.selectbox("Calendar Year", ["All Years"] + list(years))
-    categories = sorted(df["Category"].unique())
-    selected_categories = st.sidebar.multiselect("Product Categories", categories, default=categories)
-    shipping_types = sorted(df["Shipping Type"].unique())
-    selected_shipping = st.sidebar.multiselect("Shipping Methods", shipping_types, default=shipping_types)
-    sellers = sorted(df["Seller"].unique())
-    selected_sellers = st.sidebar.multiselect("Sellers", sellers, default=sellers)
+# 1. Sidebar Navigation Configuration
+st.sidebar.image("https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&q=80&w=200", use_container_width=True)
+menu_options = [
+    "📈 Executive Overview",
+    "🚚 Operational Diagnostics",
+    "👥 Bracketing & Customer Cohorts",
+    "🤖 Return Predictor (ML)",
+    "⚙️ Data Pipeline Control Panel"
+]
+page = st.sidebar.radio("📁 Navigation Pages", menu_options)
 
-    # Apply Filters to main DataFrame
-    filtered_df = df.copy()
-    if selected_year != "All Years":
-        filtered_df = filtered_df[filtered_df["Order Year"] == selected_year]
-    if selected_categories:
-        filtered_df = filtered_df[filtered_df["Category"].isin(selected_categories)]
-    if selected_shipping:
-        filtered_df = filtered_df[filtered_df["Shipping Type"].isin(selected_shipping)]
-    if selected_sellers:
-        filtered_df = filtered_df[filtered_df["Seller"].isin(selected_sellers)]
-else:
-    st.sidebar.info("Please generate and clean the dataset in the Control Panel tab to enable filters.")
+# 2. Sidebar Filters (only shown for analytics pages)
+if page in ["📈 Executive Overview", "🚚 Operational Diagnostics", "👥 Bracketing & Customer Cohorts"]:
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🔍 Filters")
+    if not df.empty:
+        years = sorted(df["Order Year"].unique())
+        selected_year = st.sidebar.selectbox("Calendar Year", ["All Years"] + list(years))
+        categories = sorted(df["Category"].unique())
+        selected_categories = st.sidebar.multiselect("Product Categories", categories, default=categories)
+        shipping_types = sorted(df["Shipping Type"].unique())
+        selected_shipping = st.sidebar.multiselect("Shipping Methods", shipping_types, default=shipping_types)
+        sellers = sorted(df["Seller"].unique())
+        selected_sellers = st.sidebar.multiselect("Sellers", sellers, default=sellers)
+
+        # Apply Filters to main DataFrame
+        filtered_df = df.copy()
+        if selected_year != "All Years":
+            filtered_df = filtered_df[filtered_df["Order Year"] == selected_year]
+        if selected_categories:
+            filtered_df = filtered_df[filtered_df["Category"].isin(selected_categories)]
+        if selected_shipping:
+            filtered_df = filtered_df[filtered_df["Shipping Type"].isin(selected_shipping)]
+        if selected_sellers:
+            filtered_df = filtered_df[filtered_df["Seller"].isin(selected_sellers)]
+    else:
+        st.sidebar.info("Please compile the dataset in the Control Panel tab to enable filters.")
 
 # Title block
 st.markdown('<div class="main-title">E-Commerce Return & Refund Analysis</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">Data-Driven Diagnostics & Optimization Dashboard</div>', unsafe_allow_html=True)
 
-# 3. Create Navigation Tabs
-tab_labels = ["📈 Executive Overview", "🚚 Operational & Seller Diagnostics", "👥 Bracketing & Customer Cohorts", "🤖 Real-Time Return Predictor (ML)", "⚙️ Data Pipeline Control Panel"]
-tab1, tab2, tab3, tab4, tab5 = st.tabs(tab_labels)
-
-# ----------------- TAB 1: EXECUTIVE OVERVIEW -----------------
-with tab1:
+# ----------------- PAGE 1: EXECUTIVE OVERVIEW -----------------
+if page == "📈 Executive Overview":
     if df.empty:
-        st.warning("⚠️ No cleaned dataset found. Please navigate to the **⚙️ Data Pipeline Control Panel** tab and initialize your dataset first.")
+        st.warning("⚠️ No cleaned dataset found. Please navigate to the **⚙️ Data Pipeline Control Panel** page and initialize your dataset first.")
     else:
-        # 3.1 Metric Calculations
+        # Metric Calculations
         t_orders = len(filtered_df)
         t_returned = filtered_df[filtered_df["Return Status"] == "Returned"].shape[0]
         ret_rate = (t_returned / t_orders * 100) if t_orders > 0 else 0
@@ -630,7 +591,7 @@ with tab1:
         net_loss = filtered_df["Profit Loss"].sum()
         aov = filtered_df["Total Amount"].mean() if t_orders > 0 else 0
         
-        # 3.2 Display KPI Row
+        # Display KPI Row
         col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
@@ -680,7 +641,7 @@ with tab1:
 
         st.markdown("<hr>", unsafe_allow_html=True)
         
-        # 3.3 Charts Row
+        # Charts Row (Interactive Plotly Rendering)
         chart_col1, chart_col2 = st.columns(2)
         
         with chart_col1:
@@ -691,48 +652,63 @@ with tab1:
             ).reset_index()
             monthly_stats["Return Rate (%)"] = (monthly_stats["Returns"] / monthly_stats["Orders"]) * 100
             
-            fig, ax1 = plt.subplots(figsize=(10, 5))
-            ax2 = ax1.twinx()
-            
-            # Draw charts
-            sns.barplot(data=monthly_stats, x="Month-Year", y="Returns", color="#3B82F6", ax=ax1, alpha=0.55)
-            sns.lineplot(data=monthly_stats, x="Month-Year", y="Return Rate (%)", color="#60A5FA", marker="o", linewidth=2.5, ax=ax2)
-            
-            # Apply dark mode styles
-            style_obsidian_chart(fig, ax1)
-            style_obsidian_chart(fig, ax2)
-            ax1.set_ylabel("Returned Orders", color="#94A3B8", fontweight="bold")
-            ax2.set_ylabel("Return Rate (%)", color="#94A3B8", fontweight="bold")
-            ax1.set_xlabel("Month-Year", color="#94A3B8", fontweight="bold")
-            ax1.set_xticklabels(monthly_stats["Month-Year"], rotation=45, color="#94A3B8")
-            plt.title("Returns Volume & Rate Monthly Timeline", color="#FFFFFF", fontsize=12, fontweight="bold", pad=12)
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            # Fast dual axis chart using Plotly Graphic Objects
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=monthly_stats["Month-Year"], 
+                y=monthly_stats["Returns"], 
+                name="Returns", 
+                marker_color="rgba(59, 130, 246, 0.6)"
+            ))
+            fig.add_trace(go.Scatter(
+                x=monthly_stats["Month-Year"], 
+                y=monthly_stats["Return Rate (%)"], 
+                name="Return Rate", 
+                yaxis="y2", 
+                line=dict(color="#60A5FA", width=3), 
+                mode="lines+markers"
+            ))
+            fig.update_layout(
+                title="Returns Volume & Rate Monthly Timeline",
+                yaxis=dict(title="Returned Orders", gridcolor="#1E293B", titlefont=dict(color="#94A3B8")),
+                yaxis2=dict(title="Return Rate (%)", overlaying="y", side="right", titlefont=dict(color="#94A3B8"), showgrid=False),
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                height=350,
+                margin=dict(l=10, r=10, t=40, b=10),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             st.markdown('</div>', unsafe_allow_html=True)
             
         with chart_col2:
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
             cat_stats = filtered_df.groupby("Category").agg(
-                Total=("Order ID", "count"),
-                Returned=("Return Indicator", "sum"),
                 Rate=("Return Indicator", "mean")
             ).reset_index().sort_values(by="Rate", ascending=False)
             cat_stats["Rate"] *= 100
             
-            fig, ax = plt.subplots(figsize=(10, 5))
-            sns.barplot(data=cat_stats, x="Category", y="Rate", palette="cool", ax=ax)
-            
-            # Style Obsidian
-            style_obsidian_chart(fig, ax)
-            ax.set_ylabel("Return Rate (%)", color="#94A3B8", fontweight="bold")
-            ax.set_xlabel("Product Category", color="#94A3B8", fontweight="bold")
-            plt.title("Return Rate (%) across Product Categories", color="#FFFFFF", fontsize=12, fontweight="bold", pad=12)
-            for container in ax.containers:
-                ax.bar_label(container, fmt="%.1f%%", color='#FFFFFF', fontsize=9, padding=3)
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            fig = px.bar(
+                cat_stats, x="Category", y="Rate", 
+                title="Return Rate (%) across Product Categories",
+                labels={"Rate": "Return Rate (%)"}, 
+                text="Rate", 
+                template="plotly_dark"
+            )
+            fig.update_traces(
+                texttemplate="%{text:.1f}%", 
+                textposition="outside", 
+                marker_color="rgba(139, 92, 246, 0.7)"
+            )
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)", 
+                height=350,
+                margin=dict(l=10, r=10, t=40, b=10),
+                yaxis=dict(gridcolor="#1E293B")
+            )
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             st.markdown('</div>', unsafe_allow_html=True)
 
         chart_col3, chart_col4 = st.columns(2)
@@ -741,45 +717,50 @@ with tab1:
             ret_df = filtered_df[filtered_df["Return Status"] == "Returned"]
             if not ret_df.empty:
                 reason_counts = ret_df["Return Reason"].value_counts().reset_index()
-                
-                fig, ax = plt.subplots(figsize=(10, 5))
-                sns.barplot(data=reason_counts, x="count", y="Return Reason", palette="flare", ax=ax)
-                style_obsidian_chart(fig, ax)
-                ax.set_xlabel("Number of Returned Orders", color="#94A3B8", fontweight="bold")
-                ax.set_ylabel("Reason", color="#94A3B8", fontweight="bold")
-                plt.title("Primary Reasons for Returns", color="#FFFFFF", fontsize=12, fontweight="bold", pad=12)
-                fig.tight_layout()
-                st.pyplot(fig)
-                plt.close()
+                fig = px.bar(
+                    reason_counts, x="count", y="Return Reason", 
+                    orientation="h", 
+                    title="Primary Reasons for Returns",
+                    labels={"count": "Returned Orders"}, 
+                    template="plotly_dark"
+                )
+                fig.update_traces(marker_color="rgba(244, 63, 94, 0.7)")
+                fig.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)", 
+                    height=320,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    xaxis=dict(gridcolor="#1E293B")
+                )
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             else:
                 st.info("No returned items found for current filters.")
             st.markdown('</div>', unsafe_allow_html=True)
                 
         with chart_col4:
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            fig, ax = plt.subplots(figsize=(10, 5))
-            # Custom boxplot with custom properties to match Obsidian theme
-            sns.boxplot(
-                data=filtered_df, 
-                x="Return Status", 
-                y="Customer Rating", 
-                palette={"Not Returned": "#10B981", "Returned": "#EF4444"}, 
-                ax=ax,
-                boxprops=dict(alpha=0.6)
+            fig = px.box(
+                filtered_df, x="Return Status", y="Customer Rating", 
+                title="Customer Rating Distribution by Return Status",
+                color="Return Status", 
+                color_discrete_map={"Not Returned": "#10B981", "Returned": "#EF4444"}, 
+                template="plotly_dark"
             )
-            style_obsidian_chart(fig, ax)
-            ax.set_xlabel("Return Status", color="#94A3B8", fontweight="bold")
-            ax.set_ylabel("Customer Rating (1-5)", color="#94A3B8", fontweight="bold")
-            plt.title("Customer Rating Distribution by Return Status", color="#FFFFFF", fontsize=12, fontweight="bold", pad=12)
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)", 
+                height=320,
+                margin=dict(l=10, r=10, t=40, b=10),
+                yaxis=dict(gridcolor="#1E293B"),
+                showlegend=False
+            )
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             st.markdown('</div>', unsafe_allow_html=True)
 
-# ----------------- TAB 2: OPERATIONAL & SELLER DIAGNOSTICS -----------------
-with tab2:
+# ----------------- PAGE 2: OPERATIONAL DIAGNOSTICS -----------------
+elif page == "🚚 Operational Diagnostics":
     if df.empty:
-        st.warning("⚠️ No cleaned dataset found. Please navigate to the **⚙️ Data Pipeline Control Panel** tab and initialize your dataset first.")
+        st.warning("⚠️ No cleaned dataset found. Please navigate to the **⚙️ Data Pipeline Control Panel** page and initialize your dataset first.")
     else:
         st.subheader("📦 Delivery Speed & Shipping Channel Analysis")
         op_col1, op_col2 = st.columns(2)
@@ -788,50 +769,64 @@ with tab2:
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
             filtered_df["Is Delayed"] = filtered_df["Delivery Delay"] > 0
             delay_stats = filtered_df.groupby("Is Delayed").agg(
-                Orders=("Order ID", "count"),
-                Returns=("Return Indicator", "sum"),
                 Rate=("Return Indicator", "mean")
             ).reset_index()
             delay_stats["Rate"] *= 100
-            delay_stats["Is Delayed"] = delay_stats["Is Delayed"].map({True: "Delayed (> Expected)", False: "On-Time / Early"})
+            delay_stats["Is Delayed"] = delay_stats["Is Delayed"].map({True: "Delayed (> Target)", False: "On-Time / Early"})
             
-            fig, ax = plt.subplots(figsize=(10, 5))
-            sns.barplot(data=delay_stats, x="Is Delayed", y="Rate", palette="coolwarm", ax=ax)
-            style_obsidian_chart(fig, ax)
-            ax.set_ylabel("Return Rate (%)", color="#94A3B8", fontweight="bold")
-            ax.set_xlabel("Shipment Delivery Status", color="#94A3B8", fontweight="bold")
-            plt.title("Return Rate Comparison: On-Time vs. Delayed Deliveries", color="#FFFFFF", fontsize=12, fontweight="bold", pad=12)
-            for container in ax.containers:
-                ax.bar_label(container, fmt="%.1f%%", color='#FFFFFF', fontsize=9, padding=3)
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            fig = px.bar(
+                delay_stats, x="Is Delayed", y="Rate", 
+                title="Return Rate: On-Time vs. Delayed Deliveries", 
+                labels={"Rate": "Return Rate (%)"}, 
+                text="Rate", 
+                template="plotly_dark"
+            )
+            fig.update_traces(
+                texttemplate="%{text:.1f}%", 
+                textposition="outside", 
+                marker_color=["rgba(52, 211, 153, 0.7)", "rgba(248, 113, 113, 0.7)"]
+            )
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)", 
+                height=350,
+                margin=dict(l=10, r=10, t=40, b=10),
+                yaxis=dict(gridcolor="#1E293B")
+            )
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             st.markdown('</div>', unsafe_allow_html=True)
             
         with op_col2:
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
             ship_stats = filtered_df.groupby("Shipping Type").agg(
-                Orders=("Order ID", "count"),
                 Rate=("Return Indicator", "mean")
-            ).reset_index()
+            ).reset_index().sort_values(by="Rate", ascending=False)
             ship_stats["Rate"] *= 100
-            ship_stats = ship_stats.sort_values(by="Rate", ascending=False)
             
-            fig, ax = plt.subplots(figsize=(10, 5))
-            sns.barplot(data=ship_stats, x="Shipping Type", y="Rate", palette="crest", ax=ax)
-            style_obsidian_chart(fig, ax)
-            ax.set_ylabel("Return Rate (%)", color="#94A3B8", fontweight="bold")
-            ax.set_xlabel("Shipping Channel", color="#94A3B8", fontweight="bold")
-            plt.title("Return Rate (%) by Shipping Mode", color="#FFFFFF", fontsize=12, fontweight="bold", pad=12)
-            for container in ax.containers:
-                ax.bar_label(container, fmt="%.1f%%", color='#FFFFFF', fontsize=9, padding=3)
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            fig = px.bar(
+                ship_stats, x="Shipping Type", y="Rate", 
+                title="Return Rate (%) by Shipping Mode", 
+                labels={"Rate": "Return Rate (%)"}, 
+                text="Rate", 
+                template="plotly_dark"
+            )
+            fig.update_traces(
+                texttemplate="%{text:.1f}%", 
+                textposition="outside", 
+                marker_color="rgba(6, 182, 212, 0.7)"
+            )
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)", 
+                height=350,
+                margin=dict(l=10, r=10, t=40, b=10),
+                yaxis=dict(gridcolor="#1E293B")
+            )
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("<hr>", unsafe_allow_html=True)
-        st.subheader("🏬 Seller Leaderboards & Reverse Logistics Cost")
+        st.subheader("🏬 Seller Leaderboards & Warehouse Volumes")
         op_col3, op_col4 = st.columns(2)
         
         with op_col3:
@@ -841,19 +836,28 @@ with tab2:
                 Refunds=("Refund Amount", "sum")
             ).reset_index()
             seller_stats["Refund Ratio (%)"] = (seller_stats["Refunds"] / seller_stats["Revenue"]) * 100
-            seller_stats = seller_stats.sort_values(by="Refund Ratio (%)", ascending=False)
+            seller_stats = seller_stats.sort_values(by="Refund Ratio (%)", ascending=True) # Ascending for hbar sort
             
-            fig, ax = plt.subplots(figsize=(10, 5))
-            sns.barplot(data=seller_stats, y="Seller", x="Refund Ratio (%)", palette="magma", ax=ax)
-            style_obsidian_chart(fig, ax)
-            ax.set_xlabel("Refund Ratio (%)", color="#94A3B8", fontweight="bold")
-            ax.set_ylabel("Seller Name", color="#94A3B8", fontweight="bold")
-            plt.title("Seller Leaderboard: Refund to Revenue Ratio", color="#FFFFFF", fontsize=12, fontweight="bold", pad=12)
-            for container in ax.containers:
-                ax.bar_label(container, fmt="%.1f%%", color='#FFFFFF', fontsize=9, padding=3)
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            fig = px.bar(
+                seller_stats, y="Seller", x="Refund Ratio (%)", 
+                orientation="h", 
+                title="Seller Leaderboard: Refund to Revenue Ratio", 
+                text="Refund Ratio (%)", 
+                template="plotly_dark"
+            )
+            fig.update_traces(
+                texttemplate="%{text:.1f}%", 
+                textposition="outside", 
+                marker_color="rgba(245, 158, 11, 0.7)"
+            )
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)", 
+                height=350,
+                margin=dict(l=10, r=10, t=40, b=10),
+                xaxis=dict(gridcolor="#1E293B")
+            )
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             st.markdown('</div>', unsafe_allow_html=True)
             
         with op_col4:
@@ -865,31 +869,39 @@ with tab2:
             wh_stats["Return Rate (%)"] = (wh_stats["Returned"] / wh_stats["Orders"]) * 100
             wh_stats = wh_stats.sort_values(by="Return Rate (%)", ascending=False)
             
-            fig, ax = plt.subplots(figsize=(10, 5))
-            sns.barplot(data=wh_stats, x="Warehouse", y="Return Rate (%)", palette="viridis", ax=ax)
-            style_obsidian_chart(fig, ax)
-            ax.set_ylabel("Return Rate (%)", color="#94A3B8", fontweight="bold")
-            ax.set_xlabel("Warehouse Location", color="#94A3B8", fontweight="bold")
-            plt.title("Return Rate (%) by Dispatch Warehouse", color="#FFFFFF", fontsize=12, fontweight="bold", pad=12)
-            for container in ax.containers:
-                ax.bar_label(container, fmt="%.1f%%", color='#FFFFFF', fontsize=9, padding=3)
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            fig = px.bar(
+                wh_stats, x="Warehouse", y="Return Rate (%)", 
+                title="Return Rate (%) by Dispatch Warehouse", 
+                text="Return Rate (%)", 
+                template="plotly_dark"
+            )
+            fig.update_traces(
+                texttemplate="%{text:.1f}%", 
+                textposition="outside", 
+                marker_color="rgba(16, 185, 129, 0.7)"
+            )
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)", 
+                height=350,
+                margin=dict(l=10, r=10, t=40, b=10),
+                yaxis=dict(gridcolor="#1E293B")
+            )
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             st.markdown('</div>', unsafe_allow_html=True)
 
-# ----------------- TAB 3: BRACKETING & CUSTOMER COHORTS -----------------
-with tab3:
+# ----------------- PAGE 3: BRACKETING & CUSTOMER COHORTS -----------------
+elif page == "👥 Bracketing & Customer Cohorts":
     if df.empty:
-        st.warning("⚠️ No cleaned dataset found. Please navigate to the **⚙️ Data Pipeline Control Panel** tab and initialize your dataset first.")
+        st.warning("⚠️ No cleaned dataset found. Please navigate to the **⚙️ Data Pipeline Control Panel** page and initialize your dataset first.")
     else:
         st.subheader("👥 Advanced Customer Return Behaviors")
         st.markdown("""
-        **Bracketing** occurs when a customer purchases multiple sizes/colors of the same product at the same time,
-        selects the best fit, and returns the others.
+        **Bracketing** occurs when a customer purchases multiple variations (sizes, styles) of the same product at once,
+        testing them at home, and returning the incorrect sizes.
         """)
         
-        # 3.1 Calculate bracketing indices
+        # Calculate bracketing indices
         order_groups = filtered_df.groupby(["Customer ID", "Order Date", "Product Name"])
         bracketing_candidates = order_groups.filter(lambda x: len(x) > 1)
         bracketed_orders = bracketing_candidates.groupby(["Customer ID", "Order Date", "Product Name"]).filter(
@@ -914,24 +926,29 @@ with tab3:
         bc_col1, bc_col2 = st.columns(2)
         with bc_col1:
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            st.markdown("**Which Categories suffer from Bracketing the most?**")
             if brack_count > 0:
-                fig, ax = plt.subplots(figsize=(10, 5))
-                sns.countplot(data=brack_returned, x="Category", palette="cool", order=brack_returned["Category"].value_counts().index, ax=ax)
-                style_obsidian_chart(fig, ax)
-                ax.set_ylabel("Returned Items Count", color="#94A3B8", fontweight="bold")
-                ax.set_xlabel("Product Category", color="#94A3B8", fontweight="bold")
-                plt.title("Bracketing Returns by Category", color="#FFFFFF", fontsize=12, fontweight="bold", pad=12)
-                fig.tight_layout()
-                st.pyplot(fig)
-                plt.close()
+                brack_grp = brack_returned.groupby("Category").size().reset_index(name="count").sort_values(by="count", ascending=False)
+                fig = px.bar(
+                    brack_grp, x="Category", y="count", 
+                    title="Bracketing Returns by Category", 
+                    labels={"count": "Returned Items"}, 
+                    template="plotly_dark"
+                )
+                fig.update_traces(marker_color="rgba(236, 72, 153, 0.7)")
+                fig.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)", 
+                    height=350,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    yaxis=dict(gridcolor="#1E293B")
+                )
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             else:
                 st.info("No bracketing behavior detected under current filters.")
             st.markdown('</div>', unsafe_allow_html=True)
                 
         with bc_col2:
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            st.markdown("**Demographics Analysis: Age Groups & Return Rates**")
             age_bins = [18, 25, 35, 45, 55, 75]
             age_labels = ["18-25", "26-35", "36-45", "46-55", "56+"]
             filtered_df["Age Group"] = pd.cut(filtered_df["Customer Age"], bins=age_bins, labels=age_labels)
@@ -941,17 +958,26 @@ with tab3:
             ).reset_index()
             age_stats["Rate"] *= 100
             
-            fig, ax = plt.subplots(figsize=(10, 5))
-            sns.barplot(data=age_stats, x="Age Group", y="Rate", palette="Purples", ax=ax)
-            style_obsidian_chart(fig, ax)
-            ax.set_ylabel("Return Rate (%)", color="#94A3B8", fontweight="bold")
-            ax.set_xlabel("Customer Age Cohort", color="#94A3B8", fontweight="bold")
-            plt.title("Return Rate (%) across Age Cohorts", color="#FFFFFF", fontsize=12, fontweight="bold", pad=12)
-            for container in ax.containers:
-                ax.bar_label(container, fmt="%.1f%%", color='#FFFFFF', fontsize=9, padding=3)
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            fig = px.bar(
+                age_stats, x="Age Group", y="Rate", 
+                title="Return Rate (%) across Age Cohorts", 
+                labels={"Rate": "Return Rate (%)"}, 
+                text="Rate", 
+                template="plotly_dark"
+            )
+            fig.update_traces(
+                texttemplate="%{text:.1f}%", 
+                textposition="outside", 
+                marker_color="rgba(168, 85, 247, 0.7)"
+            )
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)", 
+                height=350,
+                margin=dict(l=10, r=10, t=40, b=10),
+                yaxis=dict(gridcolor="#1E293B")
+            )
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("<hr>", unsafe_allow_html=True)
@@ -975,8 +1001,8 @@ with tab3:
         else:
             st.info("No chronic returners data found. Please compile the dataset in the Control Panel.")
 
-# ----------------- TAB 4: REAL-TIME RETURN PREDICTOR -----------------
-with tab4:
+# ----------------- PAGE 4: RETURN PREDICTOR (ML) -----------------
+elif page == "🤖 Return Predictor (ML)":
     st.subheader("🤖 Real-Time Returns Predictive Simulator (Machine Learning)")
     st.markdown("Use this panel to simulate a checkout cart and predict the probability that a customer will return the items in their cart.")
     
@@ -1000,7 +1026,6 @@ with tab4:
         st.warning("⚠️ Prediction pipeline pickle file not found. Please navigate to the **⚙️ Data Pipeline Control Panel** and click **Train Model** first.")
 
     if model_loaded and not df.empty:
-        # Glassmorphic layout for ML predictor inputs
         st.markdown('<div class="chart-container">', unsafe_allow_html=True)
         sim_col1, sim_col2, sim_col3 = st.columns(3)
         
@@ -1044,13 +1069,13 @@ with tab4:
             
             with score_col1:
                 if prob_percent < 20:
-                    status_color = "#34D399" # Bright emerald
+                    status_color = "#34D399"
                     status_text = "LOW RISK"
                 elif prob_percent < 45:
-                    status_color = "#FBBF24" # Bright amber
+                    status_color = "#FBBF24"
                     status_text = "MEDIUM RISK"
                 else:
-                    status_color = "#F87171" # Bright coral red
+                    status_color = "#F87171"
                     status_text = "HIGH RISK"
                     
                 st.markdown(f"""
@@ -1085,8 +1110,8 @@ with tab4:
     else:
         st.info("The predictor will become interactive once data files are compiled and model is trained.")
 
-# ----------------- TAB 5: DATA PIPELINE CONTROL PANEL -----------------
-with tab5:
+# ----------------- PAGE 5: DATA PIPELINE CONTROL PANEL -----------------
+elif page == "⚙️ Data Pipeline Control Panel":
     st.subheader("⚙️ Local Data Pipeline Admin Panel")
     st.markdown("""
     This control panel allows you to run, synthesize, clean, and train the entire data project pipeline directly from this web interface.
@@ -1095,7 +1120,6 @@ with tab5:
     
     col_gen, col_clean, col_train = st.columns(3)
     
-    # 1. GENERATE CARD
     with col_gen:
         st.markdown("""
         <div style="background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(96, 165, 250, 0.25); border-radius:14px; padding:22px; height:380px; box-shadow: 0 4px 30px rgba(59, 130, 246, 0.05); backdrop-filter: blur(10px);">
@@ -1104,7 +1128,6 @@ with tab5:
         </div>
         """, unsafe_allow_html=True)
         
-        # Streamlit elements positioned underneath the HTML box
         num_orders_input = st.slider("Select Order Record Count", min_value=5000, max_value=100000, value=50000, step=5000)
         
         if st.button("🚀 Generate Raw Data", use_container_width=True):
@@ -1117,7 +1140,6 @@ with tab5:
             except Exception as e:
                 st.error(f"Generation failed: {e}")
                 
-    # 2. CLEAN CARD
     with col_clean:
         st.markdown("""
         <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(52, 211, 153, 0.25); border-radius:14px; padding:22px; height:380px; box-shadow: 0 4px 30px rgba(16, 185, 129, 0.05); backdrop-filter: blur(10px);">
@@ -1125,7 +1147,7 @@ with tab5:
             <p style="font-size:13.5px; color:#94A3B8; line-height:1.5;">Executes the sanitization rules (removes duplicates, casts currencies/dates, fixes negatives, imputes ratings) and calculates logistics overhead.</p>
         </div>
         """, unsafe_allow_html=True)
-        st.write("") # Spacer
+        st.write("")
         
         if st.button("🧼 Run Data Cleaning", use_container_width=True):
             st.info("Running cleaning pipeline...")
@@ -1142,7 +1164,6 @@ with tab5:
             except Exception as e:
                 st.error(f"Cleaning failed: {e}")
                 
-    # 3. TRAIN CARD
     with col_train:
         st.markdown("""
         <div style="background: rgba(236, 72, 153, 0.12); border: 1px solid rgba(244, 114, 182, 0.25); border-radius:14px; padding:22px; height:380px; box-shadow: 0 4px 30px rgba(236, 72, 153, 0.05); backdrop-filter: blur(10px);">
@@ -1150,7 +1171,7 @@ with tab5:
             <p style="font-size:13.5px; color:#94A3B8; line-height:1.5;">Splits the cleaned dataset, standardizes columns, trains a Random Forest Classifier to identify return risks, and exports the serialized pipeline.</p>
         </div>
         """, unsafe_allow_html=True)
-        st.write("") # Spacer
+        st.write("")
         
         if st.button("🧠 Train ML Model", use_container_width=True):
             st.info("Training predictor model...")
